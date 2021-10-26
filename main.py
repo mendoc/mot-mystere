@@ -2,6 +2,7 @@ from utils import get_random_word
 import logging
 import os
 import json
+from random import randint
 from dotenv import load_dotenv
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
@@ -13,6 +14,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 # La commande de base pour discuter avec le robot
 # Elle sert également pour lancer une partie
 
@@ -23,17 +25,19 @@ def start(update, context):
     mot_meta = get_random_word()
     mot = mot_meta[0].upper()
     lien = mot_meta[1]
-    
+    indices = mot_meta[2]
+
     trouve = ""
     for lettre in mot:
         if lettre == " " or lettre == "-":
             trouve += lettre
-        else:            
+        else:
             trouve += "*"
 
     meta = {
         "mot": mot,
         "lien": lien,
+        "indices": indices,
         "trouve": trouve,
         "scores": {
             update.message.from_user.first_name: 0
@@ -51,8 +55,17 @@ def reveler(update, context):
     mot_dic = get_word_meta(update)
     mot_dic["trouve"] = mot_dic["mot"]
     set_word_meta(update, mot_dic)
-    update.message.reply_text(
-        "Le mot mystère était " + mot_dic['mot'] + ".\n\nPour plus d'informations : \n" + mot_dic['lien'])
+    update.message.reply_markdown(
+        "Le mot mystère était " + mot_dic['mot'] + ".\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
+
+
+def indice(update, context):
+    # Récupération du mot mystère
+    mot_dic = get_word_meta(update)
+    indices = mot_dic["indices"]
+    i = randint(0, len(indices)-1)
+    key = [*indices][i]
+    update.message.reply_markdown("*Indice:* \n\n_" + key.capitalize() + "_ :\n" + indices[key])
 
 
 def echo(update, context):
@@ -106,7 +119,7 @@ def echo(update, context):
             update.message.reply_markdown("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.")
         elif tentatives[user] == 1:
             update.message.reply_markdown("*" + user + "*, il vous reste qu'une tentative.")
-        else :
+        else:
             update.message.reply_markdown("*" + user + "*, vous n'avez plus de tentatives.")
 
     else:
@@ -115,7 +128,7 @@ def echo(update, context):
                 mot_dic["scores"][user] = mot_dic["scores"][user] + mot_dic["trouve"].count("*")
             else:
                 mot_dic["scores"][user] = mot_dic["trouve"].count("*")
-            
+
             mot_dic["trouve"] = message
             print_success_message(update, mot_dic)
 
@@ -139,7 +152,7 @@ def get_word_meta(update):
 def print_success_message(update, mot_dic):
     if update.message.chat.type == "group":
         msg = "*" + update.message.from_user.first_name + "* a trouvé le mot. \nC'était *" + mot_dic['mot'] + "*."
-        msg += "\n\nPour plus d'informations : \n" + mot_dic['lien']
+        msg += "\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")"
         msg += "\n\n*Scores* :"
 
         # Affichage des scores des joueurs
@@ -149,12 +162,13 @@ def print_success_message(update, mot_dic):
         update.message.reply_markdown(msg)
     else:
         update.message.reply_markdown(
-            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] +"*.\n\nPour plus d'informations : \n" + mot_dic['lien'])
+            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] + "*.\n\nPour plus d'informations : \n" +
+            mot_dic['lien'])
 
 
 def set_word_meta(update, mot_dic):
     # Sauvegarde du mot mystère
-    fichier = open(f"{update.message.chat.id}.json", "w")
+    fichier = open(str(update.message.chat.id) + ".json", "w")
     json.dump(mot_dic, fichier, ensure_ascii=False)
     fichier.close()
 
@@ -171,6 +185,7 @@ def main():
     # Différentes commandes liées au robot
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("reveler", reveler))
+    dp.add_handler(CommandHandler("indice", indice))
 
     # Gestion des messages reçus de Telegram
     dp.add_handler(MessageHandler(Filters.text, echo))
