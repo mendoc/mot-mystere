@@ -9,23 +9,35 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 load_dotenv()
 
 # Activation du logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # La commande de base pour discuter avec le robot
 # Elle sert également pour lancer une partie
+
+
 def start(update, context):
     """Envoyer le message de démarrage quand la commande /start est exécutée."""
 
     mot_meta = get_random_word()
     mot = mot_meta[0].upper()
     lien = mot_meta[1]
-    trouve = "*" * len(mot)
+    
+    trouve = ""
+    for lettre in mot:
+        if lettre == " " or lettre == "-":
+            trouve += lettre
+        else:            
+            trouve += "*"
 
     meta = {
         "mot": mot,
         "lien": lien,
-        "trouve": trouve
+        "trouve": trouve,
+        "scores": {
+            update.message.from_user.first_name: 0
+        }
     }
     set_word_meta(update, meta)
     update.message.reply_text(f"Devinez le mot mystère\n\n" + trouve)
@@ -36,11 +48,14 @@ def reveler(update, context):
     mot_dic = get_word_meta(update)
     mot_dic["trouve"] = mot_dic["mot"]
     set_word_meta(update, mot_dic)
-    update.message.reply_text(f"Le mot mystère était {mot_dic['mot']}.\n\nPour plus d'informations : {mot_dic['lien']}")
+    update.message.reply_text(
+        f"Le mot mystère était {mot_dic['mot']}.\n\nPour plus d'informations : {mot_dic['lien']}")
 
 
 def echo(update, context):
     """Gestion du message saisi par un joueur."""
+
+    user = update.message.from_user.first_name
 
     # Récupération du mot mystère
     mot_dic = get_word_meta(update)
@@ -49,21 +64,38 @@ def echo(update, context):
     trouve = list(mot_dic["trouve"])
 
     message = update.message.text.upper()
+
+    if mot_dic["trouve"] == mot:
+        return
+
     if len(message) == 1:
         for i in range(len(mot)):
             if message == mot[i]:
+                if trouve[i] == "*":
+                    if user in mot_dic["scores"]:
+                        mot_dic["scores"][user] = mot_dic["scores"][user] + 1
+                    else:
+                        mot_dic["scores"][user] = 1
                 trouve[i] = mot[i]
+
         mot_dic["trouve"] = "".join(trouve)
         if mot_dic["trouve"] == mot:
             print_success_message(update, mot_dic)
         else:
-            update.message.reply_text(f"Devinez le mot mystère\n\n" + mot_dic["trouve"])
+            update.message.reply_text(
+                f"Devinez le mot mystère\n\n" + mot_dic["trouve"])
     else:
         if message == mot:
+            if user in mot_dic["scores"]:
+                mot_dic["scores"][user] = mot_dic["scores"][user] + mot_dic["trouve"].count("*")
+            else:
+                mot_dic["scores"][user] = mot_dic["trouve"].count("*")
+            
             mot_dic["trouve"] = message
             print_success_message(update, mot_dic)
 
     set_word_meta(update, mot_dic)
+
 
 def error(update, context):
     """Gestion des erreurs."""
@@ -81,9 +113,18 @@ def get_word_meta(update):
 
 def print_success_message(update, mot_dic):
     if update.message.chat.type == "group":
-        update.message.reply_markdown(f"*{update.message.from_user.first_name}* a trouvé le mot. C'était *{mot_dic['mot']}*.\n\nPour plus d'informations : {mot_dic['lien']}")
+        msg = "*" + update.message.from_user.first_name + "* a trouvé le mot. \nC'était *" + mot_dic['mot'] + "*."
+        msg += "\n\nPour plus d'informations : \n" + mot_dic['lien']
+        msg += "\n\n*Scores* :"
+
+        # Affichage des scores des joueurs
+        for joueur in mot_dic["scores"]:
+            msg += '\n' + joueur + ': ' + str(mot_dic["scores"][joueur]) + ' points'
+
+        update.message.reply_markdown(msg)
     else:
-        update.message.reply_markdown(f"Bravo! Vous avez trouvé le mot. C'était *{mot_dic['mot']}*.\n\nPour plus d'informations : {mot_dic['lien']}")
+        update.message.reply_markdown(
+            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] +"*.\n\nPour plus d'informations : \n" + mot_dic['lien'])
 
 
 def set_word_meta(update, mot_dic):

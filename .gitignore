@@ -3,5 +3,8 @@
 pendu
 
 .idea
+.vscode
 
 __pycache__
+
+/*.json
