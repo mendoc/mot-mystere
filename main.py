@@ -37,6 +37,9 @@ def start(update, context):
         "trouve": trouve,
         "scores": {
             update.message.from_user.first_name: 0
+        },
+        "tentatives": {
+            update.message.from_user.first_name: 10
         }
     }
     set_word_meta(update, meta)
@@ -60,12 +63,20 @@ def echo(update, context):
     # Récupération du mot mystère
     mot_dic = get_word_meta(update)
 
+    # Récupération des tentatives des joueurs
+    tentatives = mot_dic["tentatives"]
+
     mot = mot_dic["mot"]
     trouve = list(mot_dic["trouve"])
 
     message = update.message.text.upper()
 
     if mot_dic["trouve"] == mot:
+        return
+
+    # On ne continue pas si le joueur n'a plus de tentatives
+    if user in tentatives and tentatives[user] < 1 and len(message) == 1:
+        update.message.reply_markdown("*" + user + "*, vous n'avez plus de tentatives.")
         return
 
     if len(message) == 1:
@@ -84,8 +95,22 @@ def echo(update, context):
         else:
             update.message.reply_text(
                 "Devinez le mot mystère\n\n" + mot_dic["trouve"])
+
+        # Reduction du nombre de tentatives
+        if user in tentatives:
+            tentatives[user] = tentatives[user] - 1
+        else:
+            tentatives[user] = 9
+
+        if tentatives[user] > 1:
+            update.message.reply_markdown("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.")
+        elif tentatives[user] == 1:
+            update.message.reply_markdown("*" + user + "*, il vous reste qu'une tentative.")
+        else :
+            update.message.reply_markdown("*" + user + "*, vous n'avez plus de tentatives.")
+
     else:
-        if message == mot:
+        if (message == mot) and (user in tentatives) and (tentatives[user] > 0):
             if user in mot_dic["scores"]:
                 mot_dic["scores"][user] = mot_dic["scores"][user] + mot_dic["trouve"].count("*")
             else:
