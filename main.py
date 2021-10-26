@@ -40,7 +40,7 @@ def start(update, context):
         }
     }
     set_word_meta(update, meta)
-    update.message.reply_text(f"Devinez le mot mystère\n\n" + trouve)
+    update.message.reply_text("Devinez le mot mystère\n\n" + trouve)
 
 
 def reveler(update, context):
@@ -49,7 +49,7 @@ def reveler(update, context):
     mot_dic["trouve"] = mot_dic["mot"]
     set_word_meta(update, mot_dic)
     update.message.reply_text(
-        f"Le mot mystère était {mot_dic['mot']}.\n\nPour plus d'informations : {mot_dic['lien']}")
+        "Le mot mystère était " + mot_dic['mot'] + ".\n\nPour plus d'informations : \n" + mot_dic['lien'])
 
 
 def echo(update, context):
@@ -83,7 +83,7 @@ def echo(update, context):
             print_success_message(update, mot_dic)
         else:
             update.message.reply_text(
-                f"Devinez le mot mystère\n\n" + mot_dic["trouve"])
+                "Devinez le mot mystère\n\n" + mot_dic["trouve"])
     else:
         if message == mot:
             if user in mot_dic["scores"]:
