@@ -61,7 +61,13 @@ def reveler(update, context):
 
 def indice(update, context):
     # Récupération du mot mystère
+    user = update.message.from_user.first_name
     mot_dic = get_word_meta(update)
+
+    if not user in mot_dic["tentatives"] or mot_dic["tentatives"][user] > 5:
+        update.message.reply_markdown("Trop tôt pour avoir des indices.")
+        return
+
     indices = mot_dic["indices"]
     i = randint(0, len(indices)-1)
     key = [*indices][i]
@@ -162,8 +168,8 @@ def print_success_message(update, mot_dic):
         update.message.reply_markdown(msg)
     else:
         update.message.reply_markdown(
-            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] +
-            "\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
+            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] +"*.\n\n"
+            + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
 
 
 def set_word_meta(update, mot_dic):
