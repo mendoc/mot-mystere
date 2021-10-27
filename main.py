@@ -162,8 +162,8 @@ def print_success_message(update, mot_dic):
         update.message.reply_markdown(msg)
     else:
         update.message.reply_markdown(
-            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] + "*.\n\nPour plus d'informations : \n" +
-            mot_dic['lien'])
+            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] +
+            "\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
 
 
 def set_word_meta(update, mot_dic):
