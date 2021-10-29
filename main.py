@@ -29,7 +29,7 @@ def start(update, context):
 
     trouve = ""
     for lettre in mot:
-        if lettre == " " or lettre == "-":
+        if lettre == " " or lettre == "-" or lettre == "'":
             trouve += lettre
         else:
             trouve += "*"
@@ -56,7 +56,7 @@ def reveler(update, context):
     mot_dic["trouve"] = mot_dic["mot"]
     set_word_meta(update, mot_dic)
     update.message.reply_markdown(
-        "Le mot mystère était " + mot_dic['mot'] + ".\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
+        "Le mot mystère était *" + mot_dic['mot'] + "*.\n\n_Définition_:\n" + mot_dic["indices"]["definition"] + "\n\n[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
 
 
 def indice(update, context):
@@ -71,7 +71,83 @@ def indice(update, context):
     indices = mot_dic["indices"]
     i = randint(0, len(indices)-1)
     key = [*indices][i]
-    update.message.reply_markdown("*Indice:* \n\n_" + key.capitalize() + "_ :\n" + indices[key])
+
+    if key == "image":
+        update.message.reply_photo(indices["image"])
+    else:
+        update.message.reply_markdown("*Indice:* \n\n_" + key.capitalize() + "_ :\n" + indices[key])
+
+
+def get_indice_nature(update, context):
+    get_indice(update, "nature")
+
+
+def get_indice_definition(update, context):
+    get_indice(update, "definition")
+
+
+def get_indice_themes(update, context):
+    get_indice(update, "themes")
+
+
+def get_indice_image(update, context):
+    indice = get_indice(update, "image")
+
+
+def get_indice(update, key):
+    # Récupération du mot mystère
+    user    = update.message.from_user.first_name
+    message = update.message.text.upper()
+    mot_dic = get_word_meta(update)
+
+    # Récupération des tentatives des joueurs
+    tentatives = mot_dic["tentatives"]
+
+    mot = mot_dic["mot"]
+
+    if mot_dic["trouve"] == mot:
+        update.message.reply_markdown("La partie est déjà terminée. 🙂")
+        return False
+
+    if user in tentatives and tentatives[user] < 1:
+        update.message.reply_markdown("🗣 *" + user + "*, vous n'avez plus de tentatives.")
+        return False
+
+    if not user in mot_dic["tentatives"] or mot_dic["tentatives"][user] > 5:
+        update.message.reply_markdown("Trop tôt pour avoir des indices.")
+        return False
+    
+    indices = mot_dic["indices"]
+
+    if not key in indices:
+        if key == "image": update.message.reply_markdown("😔 Pas d'image displonible pour ce mot.")
+        elif key == "themes": update.message.reply_markdown("😔 Aucun thème displonible pour ce mot.")
+        return False
+
+    indice = indices[key]
+    if indice: 
+        
+        if key == "image":
+            update.message.reply_photo(indice)
+        else:
+            update.message.reply_markdown("*Indice:* \n\n_" + key.capitalize() + "_ :\n" + indice)
+
+        # Reduction du nombre de tentatives
+        if user in tentatives:
+            tentatives[user] = tentatives[user] - 1
+        else:
+            tentatives[user] = 9
+
+        if tentatives[user] > 1:
+                update.message.reply_markdown("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.")
+        elif tentatives[user] == 1:
+            update.message.reply_markdown("⚠️ *" + user + "*, il vous reste qu'une tentative.")
+        else:
+            update.message.reply_markdown("*" + user + "*, vous n'avez plus de tentatives.")
+
+    mot_dic["tentatives"] = tentatives
+    
+    set_word_meta(update, mot_dic)
 
 
 def echo(update, context):
@@ -158,6 +234,7 @@ def get_word_meta(update):
 def print_success_message(update, mot_dic):
     if update.message.chat.type == "group":
         msg = "*" + update.message.from_user.first_name + "* a trouvé le mot. \nC'était *" + mot_dic['mot'] + "*."
+        msg += "*\n\n_Définition_:\n" + mot_dic["indices"]["definition"]
         msg += "\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")"
         msg += "\n\n*Scores* :"
 
@@ -191,7 +268,10 @@ def main():
     # Différentes commandes liées au robot
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("reveler", reveler))
-    dp.add_handler(CommandHandler("indice", indice))
+    dp.add_handler(CommandHandler("nature", get_indice_nature))
+    dp.add_handler(CommandHandler("definition", get_indice_definition))
+    dp.add_handler(CommandHandler("themes", get_indice_themes))
+    dp.add_handler(CommandHandler("image", get_indice_image))
 
     # Gestion des messages reçus de Telegram
     dp.add_handler(MessageHandler(Filters.text, echo))

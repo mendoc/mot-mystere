@@ -13,31 +13,34 @@ def get_random_word():
     soup = BeautifulSoup(res.content, 'html.parser')
 
     header = soup.find(id='firstHeading')
-    lien = soup.find(id='ca-view').a.get('href')
-
+    lien   = soup.find(id='ca-view').a.get('href')
     nature = soup.find(class_='titredef')
+    image  = soup.find(class_='thumbimage')
 
-    definiton = soup.ol.li
+    definition = soup.ol.li
 
-    if definiton.ul:
-        definiton.ul.clear()
-    definiton = definiton.getText()
+    if definition.ul:
+        definition.ul.clear()
+    definition = definition.getText()
 
-    mot = header.get_text()
+    mot = header.get_text().replace('’', '\'')
     lien = base + lien
 
     themes = ""
-    if ")" in definiton:
-        index = definiton.rfind(")")
-        themes = definiton[:index+1].replace(") (", ", ").replace(")", "").replace("(", "").strip()
-        definiton = definiton[index+1:].strip()
+    if ")" in definition:
+        index = definition.rfind(")")
+        themes = definition[:index+1].replace(") (", ", ").replace(")", "").replace("(", "").strip()
+        definition = definition[index+1:].strip()
 
     indices = {
         "nature": nature.string,
-        "definiton": definiton
+        "definition": definition
     }
 
     if len(themes):
         indices["themes"] = themes
+
+    if (image):
+        indices["image"] = "https:" + image.get('src')
 
     return mot, lien, indices
