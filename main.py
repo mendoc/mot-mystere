@@ -91,7 +91,7 @@ def indice(update, context):
 def gerer_choix_indice(update, context):
     query      = update.callback_query
     filename   = str(query.message.chat.id) + ".json"
-    user       = query.message.chat.first_name
+    user       = query.from_user.first_name
     choix      = query.data
     mot_dic    = get_word_meta(filename)
     tentatives = mot_dic["tentatives"]
