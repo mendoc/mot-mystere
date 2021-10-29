@@ -2,9 +2,9 @@ from utils import get_random_word
 import logging
 import os
 import json
-from random import randint
 from dotenv import load_dotenv
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Updater, CallbackQueryHandler, CommandHandler, MessageHandler, Filters
 
 # Chargement de la variable d'environemment TOKEN_BOT du fichir .env
 load_dotenv()
@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 
 # La commande de base pour discuter avec le robot
 # Elle sert également pour lancer une partie
-
-
 def start(update, context):
     """Envoyer le message de démarrage quand la commande /start est exécutée."""
 
@@ -52,7 +50,7 @@ def start(update, context):
 
 def reveler(update, context):
     # Récupération du mot mystère
-    mot_dic = get_word_meta(update)
+    mot_dic = get_word_meta(f"{update.message.chat.id}.json")
     mot_dic["trouve"] = mot_dic["mot"]
     set_word_meta(update, mot_dic)
     update.message.reply_markdown(
@@ -60,95 +58,79 @@ def reveler(update, context):
 
 
 def indice(update, context):
-    # Récupération du mot mystère
-    user = update.message.from_user.first_name
-    mot_dic = get_word_meta(update)
-
-    if not user in mot_dic["tentatives"] or mot_dic["tentatives"][user] > 5:
-        update.message.reply_markdown("Trop tôt pour avoir des indices.")
-        return
-
-    indices = mot_dic["indices"]
-    i = randint(0, len(indices)-1)
-    key = [*indices][i]
-
-    if key == "image":
-        update.message.reply_photo(indices["image"])
-    else:
-        update.message.reply_markdown("*Indice:* \n\n_" + key.capitalize() + "_ :\n" + indices[key])
-
-
-def get_indice_nature(update, context):
-    get_indice(update, "nature")
-
-
-def get_indice_definition(update, context):
-    get_indice(update, "definition")
-
-
-def get_indice_themes(update, context):
-    get_indice(update, "themes")
-
-
-def get_indice_image(update, context):
-    indice = get_indice(update, "image")
-
-
-def get_indice(update, key):
-    # Récupération du mot mystère
-    user    = update.message.from_user.first_name
-    message = update.message.text.upper()
-    mot_dic = get_word_meta(update)
-
-    # Récupération des tentatives des joueurs
+    user       = update.message.from_user.first_name
+    mot_dic    = get_word_meta(f"{update.message.chat.id}.json")
     tentatives = mot_dic["tentatives"]
+
+    if not user in tentatives or tentatives[user] > 5:
+        update.message.reply_text("Trop tôt pour avoir des indices.")
+        return
 
     mot = mot_dic["mot"]
 
     if mot_dic["trouve"] == mot:
-        update.message.reply_markdown("La partie est déjà terminée. 🙂")
+        update.message.reply_text("La partie est déjà terminée. 🙂")
         return False
-
+    
     if user in tentatives and tentatives[user] < 1:
         update.message.reply_markdown("🗣 *" + user + "*, vous n'avez plus de tentatives.")
         return False
-
-    if not user in mot_dic["tentatives"] or mot_dic["tentatives"][user] > 5:
-        update.message.reply_markdown("Trop tôt pour avoir des indices.")
-        return False
     
+    keyboard = [
+        [InlineKeyboardButton("La nature du mot", callback_data='nature')],
+        [InlineKeyboardButton("Les thèmes du mot", callback_data='themes')],
+        [InlineKeyboardButton("Une image illustrative", callback_data='image')],
+        [InlineKeyboardButton("La définition du mot", callback_data='definition')],
+    ]
+
+    boutons = InlineKeyboardMarkup(keyboard)
+
+    update.message.reply_text('Quel indice voulez-vous ?', reply_markup=boutons)
+
+
+def gerer_choix_indice(update, context):
+    query      = update.callback_query
+    filename   = str(query.message.chat.id) + ".json"
+    user       = query.message.chat.first_name
+    choix      = query.data
+    mot_dic    = get_word_meta(filename)
+    tentatives = mot_dic["tentatives"]
+    message    = "Indice indisponible"
+
     indices = mot_dic["indices"]
-
-    if not key in indices:
-        if key == "image": update.message.reply_markdown("😔 Pas d'image displonible pour ce mot.")
-        elif key == "themes": update.message.reply_markdown("😔 Aucun thème displonible pour ce mot.")
-        return False
-
-    indice = indices[key]
-    if indice: 
-        
-        if key == "image":
-            update.message.reply_photo(indice)
+    if not choix in indices:
+        if choix == "image": message = "😔 Pas d'image disponible pour ce mot."
+        elif choix == "themes": message = "😔 Aucun thème disponible pour ce mot."
+        query.answer()
+        query.edit_message_text(message, parse_mode="markdown")
+    else:
+        if choix == "image":
+            query.answer()
+            query.message.reply_photo(indices["image"])
+            query.edit_message_text("_Image illustrative_", parse_mode="markdown")
         else:
-            update.message.reply_markdown("*Indice:* \n\n_" + key.capitalize() + "_ :\n" + indice)
+            # Affichage de l'indice
+            message = choix.capitalize() + ":\n" + indices[choix]
+            query.answer(message, show_alert=True)
+            
+            # Réduction du nombre de tentatives
+            if user in tentatives:
+                tentatives[user] = tentatives[user] - 1
+            else:
+                tentatives[user] = 9
 
-        # Reduction du nombre de tentatives
-        if user in tentatives:
-            tentatives[user] = tentatives[user] - 1
-        else:
-            tentatives[user] = 9
+            # Affichage du nombre de tentatives restant
+            if tentatives[user] > 1:
+                query.edit_message_text("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.", parse_mode="markdown")
+            elif tentatives[user] == 1:
+                query.edit_message_text("⚠️ *" + user + "*, il vous reste qu'une tentative.", parse_mode="markdown")
+            else:
+                query.edit_message_text("*" + user + "*, vous n'avez plus de tentatives.", parse_mode="markdown")
 
-        if tentatives[user] > 1:
-                update.message.reply_markdown("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.")
-        elif tentatives[user] == 1:
-            update.message.reply_markdown("⚠️ *" + user + "*, il vous reste qu'une tentative.")
-        else:
-            update.message.reply_markdown("*" + user + "*, vous n'avez plus de tentatives.")
-
-    mot_dic["tentatives"] = tentatives
-    
-    set_word_meta(update, mot_dic)
-
+            # Mise à jour des données de la partie
+            mot_dic["tentatives"] = tentatives
+            set_word_meta(query, mot_dic)
+            
 
 def echo(update, context):
     """Gestion du message saisi par un joueur."""
@@ -156,7 +138,7 @@ def echo(update, context):
     user = update.message.from_user.first_name
 
     # Récupération du mot mystère
-    mot_dic = get_word_meta(update)
+    mot_dic = get_word_meta(f"{update.message.chat.id}.json")
 
     # Récupération des tentatives des joueurs
     tentatives = mot_dic["tentatives"]
@@ -222,9 +204,9 @@ def error(update, context):
     logger.warning('Update "%s" \ncaused error "%s"', update, context.error)
 
 
-def get_word_meta(update):
+def get_word_meta(filename):
     # Récupération du mot mystère
-    fichier = open(f"{update.message.chat.id}.json", "r")
+    fichier = open(filename, "r")
     mot_dic = json.load(fichier)
     fichier.close()
 
@@ -234,7 +216,6 @@ def get_word_meta(update):
 def print_success_message(update, mot_dic):
     if update.message.chat.type == "group":
         msg = "*" + update.message.from_user.first_name + "* a trouvé le mot. \nC'était *" + mot_dic['mot'] + "*."
-        msg += "*\n\n_Définition_:\n" + mot_dic["indices"]["definition"]
         msg += "\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")"
         msg += "\n\n*Scores* :"
 
@@ -256,7 +237,7 @@ def set_word_meta(update, mot_dic):
     fichier.close()
 
 
-def main():
+if __name__ == '__main__':
     """Démarrage du robot."""
 
     TOKEN_BOT = os.getenv('TOKEN_BOT')
@@ -267,11 +248,10 @@ def main():
 
     # Différentes commandes liées au robot
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("indice", indice))
     dp.add_handler(CommandHandler("reveler", reveler))
-    dp.add_handler(CommandHandler("nature", get_indice_nature))
-    dp.add_handler(CommandHandler("definition", get_indice_definition))
-    dp.add_handler(CommandHandler("themes", get_indice_themes))
-    dp.add_handler(CommandHandler("image", get_indice_image))
+
+    updater.dispatcher.add_handler(CallbackQueryHandler(gerer_choix_indice))
 
     # Gestion des messages reçus de Telegram
     dp.add_handler(MessageHandler(Filters.text, echo))
@@ -284,7 +264,3 @@ def main():
 
     # Gestion de l'intérruption du programme
     updater.idle()
-
-
-if __name__ == '__main__':
-    main()
