@@ -15,14 +15,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def set_word_meta(update: Update, mot_dic):
+def set_word_meta(filename: str, mot_dic):
     # Sauvegarde du mot mystère
-    fichier = open(str(update.message.chat.id) + ".json", "w")
+    fichier = open(filename, "w")
     json.dump(mot_dic, fichier, ensure_ascii=False)
     fichier.close()
 
 
-def get_word_meta(filename):
+def get_word_meta(filename: str):
     # Récupération du mot mystère
     fichier = open(filename, "r")
     mot_dic = json.load(fichier)
@@ -31,7 +31,7 @@ def get_word_meta(filename):
     return mot_dic
 
 
-def print_success_message(update, mot_dic):
+def print_success_message(update: Update, mot_dic):
     if update.message.chat.type == "group":
         msg = "*" + update.message.from_user.first_name + "* a trouvé le mot. \nC'était *" + mot_dic['mot'] + "*."
         msg += "\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")"
@@ -53,6 +53,7 @@ def print_success_message(update, mot_dic):
 
 def start(update: Update, context: CallbackContext):
     """Envoyer le message de démarrage quand la commande /start est exécutée."""
+    filename = str(update.message.chat.id) + ".json"
 
     mot_meta = get_random_word()
     mot = mot_meta[0].upper()
@@ -66,7 +67,7 @@ def start(update: Update, context: CallbackContext):
         else:
             trouve += "*"
 
-    meta = {
+    mot_dic = {
         "mot": mot,
         "lien": lien,
         "indices": indices,
@@ -79,15 +80,16 @@ def start(update: Update, context: CallbackContext):
             update.message.from_user.first_name: 10
         }
     }
-    set_word_meta(update, meta)
+    set_word_meta(filename, mot_dic)
     update.message.reply_text("Devinez le mot mystère\n\n" + trouve)
 
 
 def reveler(update: Update, context: CallbackContext):
     # Récupération du mot mystère
+    filename = str(update.message.chat.id) + ".json"
     mot_dic = get_word_meta(f"{update.message.chat.id}.json")
     mot_dic["trouve"] = mot_dic["mot"]
-    set_word_meta(update, mot_dic)
+    set_word_meta(filename, mot_dic)
     update.message.reply_markdown(
         "Le mot mystère était *" + mot_dic['mot'] + "*.\n\n_Définition_:\n" + mot_dic["indices"][
             "definition"] + "\n\n[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
@@ -151,24 +153,28 @@ def gerer_choix_indice(update: Update, context: CallbackContext):
             message = choix.capitalize() + ":\n" + indices[choix]
             query.answer(message, show_alert=True)
 
-            # Réduction du nombre de tentatives
-            if user in tentatives:
-                tentatives[user] = tentatives[user] - 1
-            else:
-                tentatives[user] = 9
+            if choix == "definition":
+                # Réduction du nombre de tentatives
+                if user in tentatives:
+                    tentatives[user] = tentatives[user] - 1
+                else:
+                    tentatives[user] = 9
 
-            # Affichage du nombre de tentatives restant
-            if tentatives[user] > 1:
-                query.edit_message_text("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.",
-                                        parse_mode="markdown")
-            elif tentatives[user] == 1:
-                query.edit_message_text("⚠️ *" + user + "*, il vous reste qu'une tentative.", parse_mode="markdown")
-            else:
-                query.edit_message_text("*" + user + "*, vous n'avez plus de tentatives.", parse_mode="markdown")
+                # Affichage du nombre de tentatives restant
+                if tentatives[user] > 1:
+                    query.edit_message_text("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.",
+                                            parse_mode="markdown")
+                elif tentatives[user] == 1:
+                    query.edit_message_text("⚠️ *" + user + "*, il vous reste qu'une tentative.", parse_mode="markdown")
+                else:
+                    query.edit_message_text("*" + user + "*, vous n'avez plus de tentatives.", parse_mode="markdown")
 
-            # Mise à jour des données de la partie
-            mot_dic["tentatives"] = tentatives
-            set_word_meta(query, mot_dic)
+                # Mise à jour des données de la partie
+                mot_dic["tentatives"] = tentatives
+
+                set_word_meta(filename, mot_dic)
+            else:
+                query.edit_message_text("_Consultation de l'indice_", parse_mode="markdown")
 
 
 def echo(update: Update, context: CallbackContext):
@@ -244,13 +250,13 @@ def echo(update: Update, context: CallbackContext):
             mot_dic["trouve"] = message
             print_success_message(update, mot_dic)
 
-    set_word_meta(update, mot_dic)
+    filename = str(update.message.chat.id) + ".json"
+    set_word_meta(filename, mot_dic)
 
 
 def error(update: Update, context: CallbackContext):
     """Gestion des erreurs."""
     logger.warning('Update "%s" \ncaused error "%s"', update, context.error)
-
 
 
 if __name__ == '__main__':
