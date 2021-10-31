@@ -22,7 +22,7 @@ def set_word_meta(filename: str, mot_dic):
     fichier.close()
 
 
-def get_word_meta(filename: str):
+def get_word_meta(filename: str) -> dict:
     # Récupération du mot mystère
     fichier = open(filename, "r")
     mot_dic = json.load(fichier)
@@ -230,6 +230,7 @@ def echo(update: Update, context: CallbackContext):
 
             if len(mot_dic["propositions"]) > 0:
                 reponse += "\n\nLettres déjà proposées:\n"
+                mot_dic["propositions"].sort()
                 reponse += " ".join(mot_dic["propositions"])
 
             update.message.reply_text(reponse)
@@ -240,12 +241,13 @@ def echo(update: Update, context: CallbackContext):
         else:
             tentatives[user] = 9
 
-        if tentatives[user] > 1:
-            update.message.reply_markdown("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.")
-        elif tentatives[user] == 1:
-            update.message.reply_markdown("*" + user + "*, il vous reste qu'une tentative.")
-        else:
-            update.message.reply_markdown("*" + user + "*, vous n'avez plus de tentatives.")
+        if mot_dic["trouve"] != mot:
+            if tentatives[user] > 1:
+                update.message.reply_markdown("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.")
+            elif tentatives[user] == 1:
+                update.message.reply_markdown("*" + user + "*, il vous reste qu'une tentative.")
+            else:
+                update.message.reply_markdown("*" + user + "*, vous n'avez plus de tentatives.")
 
     else:
         if (message == mot) and (user in tentatives) and (tentatives[user] > 0):
