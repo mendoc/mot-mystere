@@ -115,11 +115,18 @@ def indice(update: Update, context: CallbackContext):
         return False
 
     keyboard = [
-        [InlineKeyboardButton("La nature du mot", callback_data='nature')],
-        [InlineKeyboardButton("Les thèmes du mot", callback_data='themes')],
-        [InlineKeyboardButton("Une image illustrative", callback_data='image')],
-        [InlineKeyboardButton("La définition du mot", callback_data='definition')],
+        [InlineKeyboardButton("La nature du mot", callback_data='nature')]
     ]
+
+    indices = mot_dic["indices"]
+
+    if "image" in indices:
+        keyboard.append([InlineKeyboardButton("Une image illustrative", callback_data='image')])
+
+    if "themes" in indices:
+        keyboard.append([InlineKeyboardButton("Les thèmes du mot", callback_data='themes')])
+
+    keyboard.append([InlineKeyboardButton("La définition du mot", callback_data='definition')])
 
     boutons = InlineKeyboardMarkup(keyboard)
 
