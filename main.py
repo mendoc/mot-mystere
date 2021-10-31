@@ -4,7 +4,7 @@ import os
 import json
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Updater, CallbackQueryHandler, CommandHandler, MessageHandler, Filters
+from telegram.ext import Updater, CallbackQueryHandler, CommandHandler, MessageHandler, Filters, CallbackContext
 
 # Chargement de la variable d'environemment TOKEN_BOT du fichir .env
 load_dotenv()
@@ -15,9 +15,43 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def set_word_meta(update: Update, mot_dic):
+    # Sauvegarde du mot mystère
+    fichier = open(str(update.message.chat.id) + ".json", "w")
+    json.dump(mot_dic, fichier, ensure_ascii=False)
+    fichier.close()
+
+
+def get_word_meta(filename):
+    # Récupération du mot mystère
+    fichier = open(filename, "r")
+    mot_dic = json.load(fichier)
+    fichier.close()
+
+    return mot_dic
+
+
+def print_success_message(update, mot_dic):
+    if update.message.chat.type == "group":
+        msg = "*" + update.message.from_user.first_name + "* a trouvé le mot. \nC'était *" + mot_dic['mot'] + "*."
+        msg += "\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")"
+        msg += "\n\n*Scores* :"
+
+        # Affichage des scores des joueurs
+        for joueur in mot_dic["scores"]:
+            msg += '\n' + joueur + ': ' + str(mot_dic["scores"][joueur]) + ' points'
+
+        update.message.reply_markdown(msg)
+    else:
+        update.message.reply_markdown(
+            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] + "*.\n\n"
+            + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
+
+
 # La commande de base pour discuter avec le robot
 # Elle sert également pour lancer une partie
-def start(update, context):
+
+def start(update: Update, context: CallbackContext):
     """Envoyer le message de démarrage quand la commande /start est exécutée."""
 
     mot_meta = get_random_word()
@@ -37,6 +71,7 @@ def start(update, context):
         "lien": lien,
         "indices": indices,
         "trouve": trouve,
+        "propositions": [],
         "scores": {
             update.message.from_user.first_name: 0
         },
@@ -48,18 +83,19 @@ def start(update, context):
     update.message.reply_text("Devinez le mot mystère\n\n" + trouve)
 
 
-def reveler(update, context):
+def reveler(update: Update, context: CallbackContext):
     # Récupération du mot mystère
     mot_dic = get_word_meta(f"{update.message.chat.id}.json")
     mot_dic["trouve"] = mot_dic["mot"]
     set_word_meta(update, mot_dic)
     update.message.reply_markdown(
-        "Le mot mystère était *" + mot_dic['mot'] + "*.\n\n_Définition_:\n" + mot_dic["indices"]["definition"] + "\n\n[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
+        "Le mot mystère était *" + mot_dic['mot'] + "*.\n\n_Définition_:\n" + mot_dic["indices"][
+            "definition"] + "\n\n[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
 
 
-def indice(update, context):
-    user       = update.message.from_user.first_name
-    mot_dic    = get_word_meta(f"{update.message.chat.id}.json")
+def indice(update: Update, context: CallbackContext):
+    user = update.message.from_user.first_name
+    mot_dic = get_word_meta(f"{update.message.chat.id}.json")
     tentatives = mot_dic["tentatives"]
 
     if not user in tentatives or tentatives[user] > 5:
@@ -71,11 +107,11 @@ def indice(update, context):
     if mot_dic["trouve"] == mot:
         update.message.reply_text("La partie est déjà terminée. 🙂")
         return False
-    
+
     if user in tentatives and tentatives[user] < 1:
         update.message.reply_markdown("🗣 *" + user + "*, vous n'avez plus de tentatives.")
         return False
-    
+
     keyboard = [
         [InlineKeyboardButton("La nature du mot", callback_data='nature')],
         [InlineKeyboardButton("Les thèmes du mot", callback_data='themes')],
@@ -88,19 +124,21 @@ def indice(update, context):
     update.message.reply_text('Quel indice voulez-vous ?', reply_markup=boutons)
 
 
-def gerer_choix_indice(update, context):
-    query      = update.callback_query
-    filename   = str(query.message.chat.id) + ".json"
-    user       = query.from_user.first_name
-    choix      = query.data
-    mot_dic    = get_word_meta(filename)
+def gerer_choix_indice(update: Update, context: CallbackContext):
+    query = update.callback_query
+    filename = str(query.message.chat.id) + ".json"
+    user = query.from_user.first_name
+    choix = query.data
+    mot_dic = get_word_meta(filename)
     tentatives = mot_dic["tentatives"]
-    message    = "Indice indisponible"
+    message = "Indice indisponible"
 
     indices = mot_dic["indices"]
     if not choix in indices:
-        if choix == "image": message = "😔 Pas d'image disponible pour ce mot."
-        elif choix == "themes": message = "😔 Aucun thème disponible pour ce mot."
+        if choix == "image":
+            message = "😔 Pas d'image disponible pour ce mot."
+        elif choix == "themes":
+            message = "😔 Aucun thème disponible pour ce mot."
         query.answer()
         query.edit_message_text(message, parse_mode="markdown")
     else:
@@ -112,7 +150,7 @@ def gerer_choix_indice(update, context):
             # Affichage de l'indice
             message = choix.capitalize() + ":\n" + indices[choix]
             query.answer(message, show_alert=True)
-            
+
             # Réduction du nombre de tentatives
             if user in tentatives:
                 tentatives[user] = tentatives[user] - 1
@@ -121,7 +159,8 @@ def gerer_choix_indice(update, context):
 
             # Affichage du nombre de tentatives restant
             if tentatives[user] > 1:
-                query.edit_message_text("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.", parse_mode="markdown")
+                query.edit_message_text("*" + user + "*, il vous reste *" + str(tentatives[user]) + "* tentatives.",
+                                        parse_mode="markdown")
             elif tentatives[user] == 1:
                 query.edit_message_text("⚠️ *" + user + "*, il vous reste qu'une tentative.", parse_mode="markdown")
             else:
@@ -130,9 +169,9 @@ def gerer_choix_indice(update, context):
             # Mise à jour des données de la partie
             mot_dic["tentatives"] = tentatives
             set_word_meta(query, mot_dic)
-            
 
-def echo(update, context):
+
+def echo(update: Update, context: CallbackContext):
     """Gestion du message saisi par un joueur."""
 
     user = update.message.from_user.first_name
@@ -166,12 +205,21 @@ def echo(update, context):
                         mot_dic["scores"][user] = 1
                 trouve[i] = mot[i]
 
+        # Ajout de la lettre dans les propositions
+        if not message in mot_dic["propositions"]:
+            mot_dic["propositions"].append(message)
+
         mot_dic["trouve"] = "".join(trouve)
         if mot_dic["trouve"] == mot:
             print_success_message(update, mot_dic)
         else:
-            update.message.reply_text(
-                "Devinez le mot mystère\n\n" + mot_dic["trouve"])
+            reponse = "Devinez le mot mystère\n\n" + mot_dic["trouve"]
+
+            if len(mot_dic["propositions"]) > 0:
+                reponse += "\n\nLettres déjà proposées:\n"
+                reponse += " ".join(mot_dic["propositions"])
+
+            update.message.reply_text(reponse)
 
         # Reduction du nombre de tentatives
         if user in tentatives:
@@ -199,42 +247,10 @@ def echo(update, context):
     set_word_meta(update, mot_dic)
 
 
-def error(update, context):
+def error(update: Update, context: CallbackContext):
     """Gestion des erreurs."""
     logger.warning('Update "%s" \ncaused error "%s"', update, context.error)
 
-
-def get_word_meta(filename):
-    # Récupération du mot mystère
-    fichier = open(filename, "r")
-    mot_dic = json.load(fichier)
-    fichier.close()
-
-    return mot_dic
-
-
-def print_success_message(update, mot_dic):
-    if update.message.chat.type == "group":
-        msg = "*" + update.message.from_user.first_name + "* a trouvé le mot. \nC'était *" + mot_dic['mot'] + "*."
-        msg += "\n\n" + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")"
-        msg += "\n\n*Scores* :"
-
-        # Affichage des scores des joueurs
-        for joueur in mot_dic["scores"]:
-            msg += '\n' + joueur + ': ' + str(mot_dic["scores"][joueur]) + ' points'
-
-        update.message.reply_markdown(msg)
-    else:
-        update.message.reply_markdown(
-            "Bravo! Vous avez trouvé le mot. \nC'était *" + mot_dic['mot'] +"*.\n\n"
-            + "[Plus d'informations sur Wiktionnaire](" + mot_dic["lien"] + ")")
-
-
-def set_word_meta(update, mot_dic):
-    # Sauvegarde du mot mystère
-    fichier = open(str(update.message.chat.id) + ".json", "w")
-    json.dump(mot_dic, fichier, ensure_ascii=False)
-    fichier.close()
 
 
 if __name__ == '__main__':
